@@ -20,17 +20,18 @@ anything spins.
 ## Requirements
 
 Python **3.11** only — the official `litewing` library pins
-`requires-python >=3.11,<3.12`.
+`requires-python >=3.11,<3.12`. One command sets everything up:
 
 ```sh
-uv venv --python 3.11
-# exact pinned commands are in requirements.txt
+uv sync
 ```
 
-`requirements.txt` pins `cflib` and `litewing` by commit, and documents two
-workarounds: `--system-certs`, needed where TLS is intercepted, and `--no-deps`
-on `litewing`, whose metadata would otherwise pull an unpinned branch archive
-of the `cflib` fork.
+`pyproject.toml` and `uv.lock` pin `cflib` and `litewing` to exact commits.
+Two settings in there are deliberate: `native-tls`, needed where TLS is
+intercepted and the bundled roots fail with `UnknownIssuer`, and an override
+forcing the pinned `cflib`, because `litewing`'s own metadata depends on an
+unpinned branch archive of the same fork and would silently move it. Git needs
+the same TLS fix: `git config --global http.sslBackend schannel`.
 
 The PC joins the drone's own Wi-Fi network, so it has no internet on that
 interface. A static address on the wireless adapter is required; a second
@@ -39,17 +40,18 @@ adapter or wired connection keeps internet available.
 ## Use
 This shouldn't lift the drone : 
 ```sh
-python scripts/lw.py check            # pre-flight, no motors, PASS/FAIL, exit 0/1
-python scripts/lw.py ramp --debut 20000 --fin 24000 --montee 3 --descente 3
-python scripts/lw.py voir --png       # summary and plot of the last run
+uv run scripts/lw.py check            # pre-flight, no motors, PASS/FAIL, exit 0/1
+uv run scripts/lw.py ramp --debut 20000 --fin 24000 --montee 3 --descente 3
+uv run scripts/lw.py vol --hauteur 0.5 --duree 3     # needs the position module
+uv run scripts/lw.py voir --png       # summary and plot of the last run
 ```
 
 `dump` records the firmware's parameters and log variables, which is how a
 firmware flash is diffed:
 
 ```sh
-python scripts/lw.py dump --sortie data/apres-flash
-diff data/baseline/params.txt data/apres-flash/params.txt
+uv run scripts/lw.py dump --sortie data/apres-flash
+uv run scripts/lw.py diff             # flags critical changes with a leading !
 ```
 
 Only one process may talk to the drone: the UDP driver binds a fixed local

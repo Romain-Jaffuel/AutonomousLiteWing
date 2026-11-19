@@ -1,0 +1,54 @@
+{
+  "dossier": "2026-11-19_185553",
+  "mode": "ramp",
+  "note": "",
+  "meta": {
+    "mode": "ramp",
+    "date": "2026-11-19T18:55:53",
+    "debut": "35000",
+    "fin": "40000",
+    "montee_s": "2.0",
+    "palier_s": "0.0",
+    "descente_s": "3.0",
+    "trim_roll": "0.0",
+    "trim_pitch": "0.0",
+    "poussee_max": "40000",
+    "regime_releve": "None",
+    "temps_releve": "None",
+    "evenement": "rampe complete",
+    "note": ""
+  },
+  "points": {
+    "moteurs": 104,
+    "etat": 52,
+    "flux": 52,
+    "analyses": 41
+  },
+  "drapeaux": [
+    "pack_faible",
+    "pack_epuise",
+    "sous_plancher",
+    "flux_aveugle"
+  ],
+  "duree_s": 2.0,
+  "commande_max": 40000,
+  "thrust_max": 40000.0,
+  "ecart_collectif": -129.0,
+  "pwm_max": 42373,
+  "vbat_depart": 3.352,
+  "vbat_min": 3.352,
+  "vbat_chute": 0.0,
+  "vbat_moyenne": 3.392,
+  "ecart_median": 3140,
+  "ecart_mini": 2012,
+  "ecart_maxi": 5106,
+  "ecart_transitoire": 10622,
+  "moteurs_au_pic": {
+    "m1": 39614,
+    "m2": 39892,
+    "m3": 41706,
+    "m4": 38788
+  },
+  "squal_median": 0.0,
+  "flux_abs_max": 0.0
+}

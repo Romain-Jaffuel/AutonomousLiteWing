@@ -1,0 +1,54 @@
+{
+  "dossier": "2026-11-19_185523",
+  "mode": "ramp",
+  "note": "",
+  "meta": {
+    "mode": "ramp",
+    "date": "2026-11-19T18:55:23",
+    "debut": "40000",
+    "fin": "45000",
+    "montee_s": "2.0",
+    "palier_s": "0.0",
+    "descente_s": "3.0",
+    "trim_roll": "0.0",
+    "trim_pitch": "0.0",
+    "poussee_max": "41896",
+    "regime_releve": "41896",
+    "temps_releve": "0.7587850093841553",
+    "evenement": "x : -20% puis coupure",
+    "note": ""
+  },
+  "points": {
+    "moteurs": 28,
+    "etat": 14,
+    "flux": 14,
+    "analyses": 15
+  },
+  "drapeaux": [
+    "pack_faible",
+    "pack_epuise",
+    "sous_plancher",
+    "flux_aveugle"
+  ],
+  "duree_s": 0.7,
+  "commande_max": 41896,
+  "thrust_max": 41771.0,
+  "ecart_collectif": -128.0,
+  "pwm_max": 49005,
+  "vbat_depart": 3.2,
+  "vbat_min": 3.2,
+  "vbat_chute": 0.0,
+  "vbat_moyenne": 3.36,
+  "ecart_median": 10986,
+  "ecart_mini": 10360,
+  "ecart_maxi": 11728,
+  "ecart_transitoire": 13056,
+  "moteurs_au_pic": {
+    "m1": 47767,
+    "m2": 38493,
+    "m3": 43417,
+    "m4": 37407
+  },
+  "squal_median": 0.0,
+  "flux_abs_max": 0.0
+}

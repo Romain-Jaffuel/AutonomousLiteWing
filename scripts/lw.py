@@ -260,6 +260,21 @@ class Rampe:
             time.sleep(safety.PAS_SETPOINT)
         self._appliquer(cible)
 
+    def _batterie_ok(self):
+        """Abort below the floor. ramp had no such check while vol did, and a
+        run went through at 3.20 V untouched: the flag fired in the summary,
+        after the fact, with nothing stopping the motors."""
+        lignes = self.enr.recues.get('etat') or []
+        if not lignes:
+            return True
+        v = lignes[-1][2]                      # [t, commande, vbat, ...]
+        if v and v < safety.VBAT_PLANCHER:
+            self.evenement = f'batterie {v:.2f} V sous le plancher'
+            print(f'\n[STOP] batterie {v:.2f} V sous'
+                  f' {safety.VBAT_PLANCHER:.2f} V')
+            return False
+        return True
+
     def _clavier(self, valeur, ecoule):
         t = safety.lire_touche()
         if t is None:
@@ -285,6 +300,8 @@ class Rampe:
                 break
             valeur = depart + (arrivee - depart) * (ecoule / duree)
             self._appliquer(valeur)
+            if clavier and not self._batterie_ok():
+                raise Arret()
             if clavier and self._clavier(valeur, ecoule) == 'decelerer':
                 return None
             if ecoule - dernier >= 1.0:
@@ -325,6 +342,8 @@ class Rampe:
                     t0 = time.time()
                     while time.time() - t0 < self.palier:
                         self._appliquer(self.fin)
+                        if not self._batterie_ok():
+                            raise Arret()
                         if self._clavier(self.fin,
                                          self.montee + time.time() - t0) == 'decelerer':
                             break

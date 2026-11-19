@@ -1,0 +1,14 @@
+mode      = ramp
+date      = 2026-11-19T18:55:53
+debut     = 35000
+fin       = 40000
+montee_s  = 2.0
+palier_s  = 0.0
+descente_s = 3.0
+trim_roll = 0.0
+trim_pitch = 0.0
+poussee_max = 40000
+regime_releve = None
+temps_releve = None
+evenement = rampe complete
+note      = 

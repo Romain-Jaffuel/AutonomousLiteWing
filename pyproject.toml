@@ -1,0 +1,28 @@
+[project]
+name = "autonomous-litewing"
+version = "0.1.0"
+description = "Measure and fly a LiteWing drone over Wi-Fi from a PC"
+requires-python = ">=3.11,<3.12"
+dependencies = [
+    "cflib",
+    "litewing",
+    "matplotlib==3.11.2",
+]
+
+[tool.uv.sources]
+cflib = { git = "https://github.com/Circuit-Digest/crazyflie-lib-python", rev = "0fb27688e39c665b4f01fe8d84330959cb44bdf4" }
+litewing = { git = "https://github.com/Circuit-Digest/LiteWing-Library", rev = "949a7c9d1ae14cd26e62f574e3fbfd896c5cd7e1" }
+
+[tool.uv]
+# A collection of scripts, not an installable package: nothing to build.
+package = false
+
+# TLS is intercepted on this machine, so the bundled roots fail with
+# UnknownIssuer. Git needs the same: git config --global http.sslBackend schannel
+system-certs = true
+
+# litewing's own metadata depends on an unpinned master archive of the cflib
+# fork, which would silently move cflib. Force the pinned revision above.
+override-dependencies = [
+    "cflib @ git+https://github.com/Circuit-Digest/crazyflie-lib-python@0fb27688e39c665b4f01fe8d84330959cb44bdf4",
+]
