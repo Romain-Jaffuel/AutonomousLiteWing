@@ -1,0 +1,61 @@
+horodatage;mode;debut;fin;montee_s;regime_releve;temps_s;poussee_max;evenement
+2026-11-17 18:57:24;setpoint;20000;30000;10.0;25515;5.5;25515;coupure clavier
+2026-11-17 19:02:52;setpoint;20000;30000;10.0;;;30000;rampe complete
+2026-11-17 19:08:33;setpoint;30000;50000;20.0;36631;6.6;36631;coupure clavier
+2026-11-17 19:09:34;setpoint;35000;50000;20.0;38843;5.1;38843;coupure clavier
+2026-11-17 19:10:09;setpoint;37000;50000;20.0;40621;5.6;40621;coupure clavier
+2026-11-17 19:10:54;setpoint;40000;50000;20.0;42179;4.4;42179;coupure clavier
+2026-11-17 19:11:33;setpoint;42000;50000;20.0;43822;4.6;43822;coupure clavier
+2026-11-17 19:12:14;setpoint;44000;50000;20.0;45338;4.5;45338;coupure clavier
+2026-11-17 19:14:31;setpoint;45000;60000;10.0;48336;2.2;48336;coupure clavier
+2026-11-17 19:14:57;setpoint;48000;60000;10.0;52375;3.6;52375;coupure clavier
+2026-11-17 19:15:50;setpoint;50000;60000;10.0;52986;3.0;52986;coupure clavier
+2026-11-17 19:16:59;setpoint;52000;60000;10.0;54591;3.2;54591;coupure clavier
+2026-11-17 19:25:19;setpoint;54000;60000;5.0;56790;2.3;56790;x : -10% en 0s puis coupure
+2026-11-17 19:26:45;setpoint;56000;60000;4.0;58172;2.2;58172;x : -10% en 0s puis coupure
+2026-11-17 19:33:11;setpoint;55000;60000;5.0;56875;1.9;56875;x : -20% en 0s puis coupure
+2026-11-17 19:38:52;setpoint;58000;60000;5.0;58994;2.5;58994;x : -30% en 0s puis coupure
+2026-11-17 20:43:52;setpoint;50000;60000;5.0;54760;2.4;54760;x : -30% en 0s puis coupure
+2026-11-17 20:54:37;setpoint;25000;40000;10.0;29639;3.1;29639;Ctrl+C
+2026-11-17 20:55:21;setpoint;28000;40000;10.0;31349;2.8;31349;Ctrl+C
+2026-11-17 20:56:05;setpoint;30000;35000;5.0;;;35000;rampe complete
+2026-11-17 20:56:41;setpoint;30000;38000;3.0;;;38000;rampe complete
+2026-11-17 20:57:17;setpoint;30000;38000;2.0;;;38000;rampe complete
+2026-11-17 20:58:19;setpoint;30000;36000;2.0;;;36000;rampe complete
+2026-11-17 20:58:57;setpoint;32000;38000;2.0;;;38000;rampe complete
+2026-11-17 20:59:32;setpoint;32000;38000;2.0;;;38000;rampe complete
+2026-11-17 21:04:21;setpoint;30000;38000;2.0;;;38000;rampe complete
+2026-11-17 21:05:26;setpoint;30000;38000;2.0;;;38000;rampe complete
+2026-11-17 21:06:04;setpoint;30000;38000;1.0;;;38000;rampe complete
+2026-11-17 21:06:33;setpoint;30000;38000;1.5;;;38000;rampe complete
+2026-11-17 21:07:00;setpoint;30000;38000;1.5;;;38000;rampe complete
+2026-11-17 21:10:23;setpoint;30000;38000;1.5;;;38000;rampe complete
+2026-11-17 21:10:54;setpoint;30000;38000;2.0;;;38000;rampe complete
+2026-11-17 21:11:39;setpoint;30000;40000;2.0;;;40000;rampe complete
+2026-11-17 21:12:11;setpoint;30000;40000;2.5;;;40000;rampe complete
+2026-11-17 21:12:43;setpoint;30000;40000;3.0;;;40000;rampe complete
+2026-11-17 21:13:12;setpoint;30000;40000;3.0;;;39613;Ctrl+C
+2026-11-17 21:13:43;setpoint;30000;40000;3.0;;;40000;rampe complete
+2026-11-17 21:16:00;setpoint;30000;40000;2.0;;;40000;rampe complete
+2026-11-17 21:16:53;setpoint;30000;40000;2.0;;;40000;rampe complete
+2026-11-17 21:17:35;setpoint;35000;40000;2.5;;;40000;rampe complete
+2026-11-17 21:18:54;setpoint;35000;40000;2.5;;;40000;rampe complete
+2026-11-17 21:19:23;setpoint;35000;40000;2.5;;;40000;rampe complete
+2026-11-17 21:20:17;setpoint;35000;40000;2.5;;;40000;rampe complete
+2026-11-17 21:21:40;setpoint;35000;40000;2.5;;;40000;rampe complete
+2026-11-17 21:22:18;setpoint;35000;40000;2.5;;;40000;rampe complete
+2026-11-17 22:18:51;setpoint;34000;37000;2.0;;;36964;Ctrl+C
+2026-11-17 22:20:11;setpoint;33000;35000;2.0;;;35000;rampe complete
+2026-11-17 22:22:11;setpoint;33000;35000;1.5;;;35000;rampe complete
+2026-11-17 22:33:04;setpoint;33000;35000;1.5;;;35000;rampe complete
+2026-11-17 22:33:45;setpoint;33000;35000;1.5;;;35000;rampe complete
+2026-11-17 22:36:22;setpoint;33000;35000;1.5;;;35000;rampe complete | trim r=+0.0 p=+1.5
+2026-11-17 22:37:20;setpoint;33000;35000;1.5;;;35000;rampe complete | trim r=+0.0 p=-1.5
+2026-11-17 22:37:45;setpoint;33000;35000;1.5;;;35000;rampe complete | trim r=+0.0 p=-0.5
+2026-11-17 22:39:35;setpoint;33000;35000;1.5;;;35000;rampe complete | trim r=+0.0 p=-0.5
+2026-11-17 22:40:48;setpoint;33000;35000;1.5;;;35000;rampe complete | trim r=-0.2 p=-0.5
+2026-11-17 22:41:26;setpoint;33000;35000;1.5;;;35000;rampe complete | trim r=-0.3 p=-0.8
+2026-11-17 22:42:21;setpoint;33000;35000;1.5;;;35000;rampe complete | trim r=+0.2 p=-0.6
+2026-11-17 22:43:02;setpoint;33000;35000;1.5;;;35000;rampe complete | trim r=-0.2 p=-0.6
+2026-11-17 22:43:45;setpoint;33000;35000;2.0;;;35000;rampe complete | trim r=-0.3 p=-0.6
+2026-11-17 22:44:18;setpoint;33000;37000;2.0;;;37000;rampe complete | trim r=-0.3 p=-0.6

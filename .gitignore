@@ -1,0 +1,18 @@
+# notes et documents de travail, non publies
+*.md
+!README.md
+
+# sorties generees a la racine par les scripts
+# les instantanes conserves sont dans data/
+/releves_poussee.csv
+/log_moteurs.csv
+/log_etat.csv
+log_toc.txt
+
+# cache de TOC cflib, regenere a chaque connexion
+cache/
+__pycache__/
+*.pyc
+
+# clone du fork cflib, depot tiers avec son propre .git
+crazyflie-clients-python/
