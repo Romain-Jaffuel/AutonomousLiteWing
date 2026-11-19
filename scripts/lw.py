@@ -553,10 +553,12 @@ def cmd_check(a):
     echecs = [x for x in r if x[0] == 'FAIL']
     print(('FAIL - ' + f'{len(echecs)} verification(s) en echec') if echecs
           else 'PASS - pret pour un vol')
+    code = 1 if echecs else 0
     if a.baseline:
+        # the dump must not mask a failing check: keep the worse of the two
         print('')
-        return cmd_dump(argparse.Namespace(sortie=a.baseline))
-    return 1 if echecs else 0
+        code = cmd_dump(argparse.Namespace(sortie=a.baseline)) or code
+    return code
 
 
 # --- vol --------------------------------------------------------------------
