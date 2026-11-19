@@ -261,9 +261,9 @@ class Rampe:
         self._appliquer(cible)
 
     def _batterie_ok(self):
-        """Abort below the floor. ramp had no such check while vol did, and a
-        run went through at 3.20 V untouched: the flag fired in the summary,
-        after the fact, with nothing stopping the motors."""
+        """False below the floor. The caller brings the drone down; it must
+        never cut, because a dead cut drops whatever is in the air. On the
+        ground this stops the climb before it lifts, which is the point."""
         lignes = self.enr.recues.get('etat') or []
         if not lignes:
             return True
@@ -301,7 +301,7 @@ class Rampe:
             valeur = depart + (arrivee - depart) * (ecoule / duree)
             self._appliquer(valeur)
             if clavier and not self._batterie_ok():
-                raise Arret()
+                return 'batterie'
             if clavier and self._clavier(valeur, ecoule) == 'decelerer':
                 return None
             if ecoule - dernier >= 1.0:
@@ -327,11 +327,25 @@ class Rampe:
             pass
 
         self.enr.demarrer()
+        # Gate before any thrust: a pack already under the floor must not be
+        # asked to lift. Needs one sample, hence the short wait.
+        t0 = time.time()
+        while not self.enr.recues.get('etat') and time.time() - t0 < 2.0:
+            time.sleep(0.05)
+        if not self._batterie_ok():
+            self.evenement = 'refus : batterie trop faible au depart'
+            print('[REFUS] pack sous le plancher, pas de montee')
+            return
+
         print(f'\n  touche = decelere vers {safety.CIBLE_DECELERATION} + note'
               f'\n  x = baisse puis coupure, Ctrl+C = coupure immediate\n')
         try:
             atteint = self._rampe(self.debut, self.fin, self.montee, 'Montee')
-            if atteint is None:
+            if atteint == 'batterie':
+                # Never a cut: descend from where we are, like a normal landing.
+                self._rampe(self.commande, 0, self.descente,
+                            'Descente batterie', clavier=False)
+            elif atteint is None:
                 depart = self.regime_releve
                 duree = max(0.5, (depart - safety.CIBLE_DECELERATION) / self.pente)
                 self._rampe(depart, safety.CIBLE_DECELERATION, duree,
@@ -340,15 +354,19 @@ class Rampe:
                 if self.palier > 0:
                     print(f'Palier {self.fin} pendant {self.palier:.1f} s')
                     t0 = time.time()
+                    faible = False
                     while time.time() - t0 < self.palier:
                         self._appliquer(self.fin)
                         if not self._batterie_ok():
-                            raise Arret()
+                            faible = True
+                            break
                         if self._clavier(self.fin,
                                          self.montee + time.time() - t0) == 'decelerer':
                             break
                         time.sleep(safety.PAS_SETPOINT)
-                self._rampe(self.fin, 0, self.descente, 'Descente', clavier=False)
+                self._rampe(self.fin, 0, self.descente,
+                            'Descente batterie' if self.palier and faible
+                            else 'Descente', clavier=False)
             print('Coupure moteurs.')
         finally:
             self._couper()
@@ -682,18 +700,31 @@ def cmd_vol(a):
                     etat['motif'] = f'hauteur {h:.2f} m au-dessus du plafond'
                 elif time.time() - debut > a.duree + safety.MARGE_VOL_S:
                     etat['motif'] = 'duree depassee'
-                elif safety.lire_touche() is not None:
-                    etat['motif'] = 'touche'
+                else:
+                    t = safety.lire_touche()
+                    if t is not None:
+                        etat['motif'] = ('x' if t in safety.TOUCHES_COUPURE
+                                         else 'touche')
                 if etat['motif']:
                     break
         except KeyboardInterrupt:
             etat['motif'] = 'Ctrl+C'
         if etat['motif']:
-            print(f"\n[STOP] {etat['motif']} -> coupure")
+            # Only an explicit operator abort cuts. Everything else lands:
+            # emergency_stop in the air drops the drone, which is worse than
+            # the condition that triggered it.
+            coupe = etat['motif'] in ('x', 'Ctrl+C')
+            print(f"\n[STOP] {etat['motif']} ->"
+                  f" {'coupure' if coupe else 'atterrissage'}")
             try:
-                drone.emergency_stop()
-            except Exception:
-                pass
+                drone.emergency_stop() if coupe else drone.land()
+            except Exception as e:
+                print(f'[ERREUR] atterrissage impossible ({e})'
+                      ' -> coupure de secours')
+                try:
+                    drone.emergency_stop()
+                except Exception:
+                    pass
             code = 1
         fil.join(timeout=3.0)
         if enr is not None:
