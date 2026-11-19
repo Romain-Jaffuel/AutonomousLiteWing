@@ -326,6 +326,7 @@ class Rampe:
             f.write(f'regime_releve = {self.regime_releve}\n')
             f.write(f'temps_releve  = {self.temps_releve}\n')
             f.write(f'evenement = {self.evenement}\n')
+            f.write(f'note      = {self.note}\n')
         return dossier
 
 
