@@ -1,0 +1,12 @@
+date      = 2026-11-17T23:10:00
+# Converti depuis les CSV a plat de la premiere version du logger.
+# Pas de bloc flux : le module de positionnement n etait pas monte.
+debut     = 33000
+fin       = 37000
+montee_s  = 2.0
+palier_s  = 1.0
+descente_s= 4.0
+trim_roll = -0.35
+trim_pitch= -0.55
+poussee_max = 37000
+evenement = rampe complete
