@@ -1,0 +1,4 @@
+date       : 2026-11-17T23:37:56
+uri        : udp://192.168.43.42
+parametres : 183 dans 28 groupes
+log        : 307 dans 32 groupes

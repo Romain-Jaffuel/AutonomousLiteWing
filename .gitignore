@@ -9,6 +9,10 @@
 /log_etat.csv
 log_toc.txt
 
+# environnement virtuel 3.11, reconstructible depuis requirements.txt
+.venv/
+venv/
+
 # cache de TOC cflib, regenere a chaque connexion
 cache/
 __pycache__/
