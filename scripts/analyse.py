@@ -143,10 +143,13 @@ def resume(dossier):
 
     # Optical flow. Zeros everywhere means the module is absent or blind.
     if flux:
-        sq = [r['squal'] for r in flux]
-        s['squal_median'] = round(_mediane(sq), 1)
+        s['squal_median'] = round(_mediane([r['squal'] for r in flux]), 1)
         s['flux_abs_max'] = round(max(max(abs(r['deltaX']), abs(r['deltaY']))
                                       for r in flux), 1)
+        if 'outlierCount' in flux[0]:
+            s['outliers_max'] = int(max(r['outlierCount'] for r in flux))
+        if 'std' in flux[0]:
+            s['flux_std_median'] = round(_mediane([r['std'] for r in flux]), 1)
         if s['squal_median'] == 0 and s['flux_abs_max'] == 0:
             s['drapeaux'].append('flux_aveugle')
     return s

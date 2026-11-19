@@ -11,6 +11,7 @@ log_toc.txt
 
 # environnement virtuel 3.11, reconstructible depuis requirements.txt
 .venv/
+.venv-vision/
 venv/
 
 # cache de TOC cflib, regenere a chaque connexion

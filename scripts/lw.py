@@ -121,7 +121,11 @@ BLOCS = {
                      'stabilizer.thrust']),
     'etat': (100, ['pm.vbat', 'stabilizer.roll', 'stabilizer.pitch',
                    'range.zrange']),
+    # squal, outlierCount and std are the flow sensor's own quality figures.
+    # A shiny or bare floor starves the sensor and the position estimate runs
+    # away; these are what a landing-on-loss rule will key off.
     'flux': (100, ['motion.deltaX', 'motion.deltaY', 'motion.squal',
+                   'motion.outlierCount', 'motion.std',
                    'stateEstimate.x', 'stateEstimate.y']),
 }
 
