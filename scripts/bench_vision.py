@@ -11,12 +11,16 @@ are therefore reported per slice, not as a single average.
 
     uv venv .venv-vision --python 3.11
     uv pip install --python .venv-vision --index-url https://download.pytorch.org/whl/cpu torch torchvision
-    uv pip install --python .venv-vision ultralytics openvino
+    uv pip install --python .venv-vision ultralytics openvino truststore
     .venv-vision/Scripts/python.exe scripts/bench_vision.py
 
     --duree 180        seconds, one flight (default)
     --taille 320       inference size
-    --appareils cpu,intel:cpu,intel:gpu,intel:npu
+    --appareils torch:cpu,ov:cpu,ov:gpu,ov:npu      (defaut)
+
+Mesure de reference sur un i5-12400F de bureau, 320 px, 60 s :
+    torch:cpu   65.7 fps, 15.22 ms
+    ov:cpu     141.4 fps,  7.07 ms
 """
 import argparse
 import json
@@ -26,6 +30,15 @@ import statistics
 import sys
 import time
 from datetime import datetime
+
+# TLS is intercepted on this network, so Python's bundled roots reject the
+# model download. truststore makes it use the OS trust store, the same fix as
+# schannel for git and --system-certs for uv.
+try:
+    import truststore
+    truststore.inject_into_ssl()
+except ImportError:
+    pass
 
 RACINE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 SORTIE = os.path.join(RACINE, 'data', 'bench')
@@ -90,9 +103,10 @@ def main():
                    help='secondes par appareil (defaut 180, soit un vol)')
     p.add_argument('--taille', type=int, default=320)
     p.add_argument('--modele', default='yolo11n.pt')
-    p.add_argument('--appareils', default='cpu',
-                   help='liste separee par des virgules : cpu, intel:cpu,'
-                        ' intel:gpu, intel:npu')
+    p.add_argument('--appareils', default='torch:cpu,ov:cpu,ov:gpu,ov:npu',
+                   help='liste separee par des virgules. torch:cpu lit le .pt,'
+                        ' ov:cpu / ov:gpu / ov:npu lisent l export OpenVINO.'
+                        ' Un appareil absent est signale et ignore.')
     a = p.parse_args()
 
     try:
@@ -115,15 +129,32 @@ def main():
     for appareil in [d.strip() for d in a.appareils.split(',') if d.strip()]:
         print(f'--- {appareil} ---')
         try:
-            m = YOLO(a.modele)
-            if appareil.startswith('intel:'):
-                # OpenVINO needs an exported model; export once, reuse after.
+            # torch:X runs the .pt file, ov:X the OpenVINO export. Naming them
+            # apart keeps the backend explicit: on this desktop OpenVINO was
+            # 2.15x faster than PyTorch on the very same CPU.
+            moteur, _, cible = appareil.partition(':')
+            cible = cible or 'cpu'
+            if moteur == 'ov':
+                # OpenVINO silently falls back to CPU for a device the machine
+                # does not have, which would pass off a CPU number as an NPU
+                # one. Checked on a 12400F: gpu and npu both returned the CPU
+                # figure to within 2%.
+                import openvino
+                presents = openvino.Core().available_devices
+                if cible.upper() not in presents:
+                    print(f'  absent de cette machine (OpenVINO voit'
+                          f' {", ".join(presents)}) — ignore')
+                    resultats[appareil] = {'absent': presents}
+                    print()
+                    continue
                 dossier = a.modele.replace('.pt', '_openvino_model')
                 if not os.path.isdir(dossier):
                     print('  export OpenVINO...')
-                    m.export(format='openvino', imgsz=a.taille, int8=False)
+                    YOLO(a.modele).export(format='openvino', imgsz=a.taille)
                 m = YOLO(dossier, task='detect')
-            r = mesurer(m, image, appareil, a.duree, a.taille)
+            else:
+                m = YOLO(a.modele)
+            r = mesurer(m, image, cible, a.duree, a.taille)
             resultats[appareil] = r
             print(f"  {r['fps_median']} fps median, {r['ms_median']} ms"
                   f"  (p95 {r['ms_p95']} ms, {r['images']} images)")

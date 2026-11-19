@@ -1,0 +1,35 @@
+{
+  "machine": {
+    "os": "Windows-10-10.0.26200-SP0",
+    "python": "3.11.15",
+    "processeur": "12th Gen Intel(R) Core(TM) i5-12400F",
+    "coeurs": 12
+  },
+  "modele": "yolo11n.pt",
+  "taille": 320,
+  "duree_s": 60.0,
+  "resultats": {
+    "cpu": {
+      "images": 3869,
+      "ms_median": 15.22,
+      "ms_p95": 17.9,
+      "fps_median": 65.7,
+      "fps_par_tranche": [
+        65.8,
+        65.6
+      ],
+      "perte_fin_pct": 0.3
+    },
+    "intel:cpu": {
+      "images": 7931,
+      "ms_median": 7.07,
+      "ms_p95": 10.24,
+      "fps_median": 141.4,
+      "fps_par_tranche": [
+        140.4,
+        142.3
+      ],
+      "perte_fin_pct": -1.4
+    }
+  }
+}

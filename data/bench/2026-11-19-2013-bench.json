@@ -1,0 +1,19 @@
+{
+  "machine": {
+    "os": "Windows-10-10.0.26200-SP0",
+    "python": "3.11.15",
+    "processeur": "12th Gen Intel(R) Core(TM) i5-12400F",
+    "coeurs": 12
+  },
+  "modele": "yolo11n.pt",
+  "taille": 320,
+  "duree_s": 60.0,
+  "resultats": {
+    "cpu": {
+      "erreur": "ConnectionError:   Download failure for https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo11n.pt. Retry limit reached. HTTPSConnectionPool(host='github.com', port=443): Max retries exceeded with url: /ultralytics/assets/releases/download/v8.4.0/yolo11n.pt (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1016)')))"
+    },
+    "intel:cpu": {
+      "erreur": "ConnectionError:   Download failure for https://github.com/ultralytics/assets/releases/download/v8.4.0/yolo11n.pt. Retry limit reached. HTTPSConnectionPool(host='github.com', port=443): Max retries exceeded with url: /ultralytics/assets/releases/download/v8.4.0/yolo11n.pt (Caused by SSLError(SSLCertVerificationError(1, '[SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed: unable to get local issuer certificate (_ssl.c:1016)')))"
+    }
+  }
+}
