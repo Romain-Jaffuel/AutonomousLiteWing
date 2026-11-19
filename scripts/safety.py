@@ -33,6 +33,8 @@ VBAT_COMPARABLE = 3.90   # below this, thrust figures are not comparable
                          # between runs
 
 VOL_MAX_S = 20.0         # the library does not bound flight duration
+MARGE_VOL_S = 3.0        # grace before the supervisor calls it overdue
+HAUTEUR_MAX_M = 1.20     # commanded height ceiling; the library has none
 PAS_SETPOINT = 0.05      # 20 Hz, above the firmware's ~500 ms watchdog
 TIMEOUT_CONNEXION = 10.0
 

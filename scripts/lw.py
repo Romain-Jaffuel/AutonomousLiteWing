@@ -135,11 +135,12 @@ class Rampe:
     """
 
     def __init__(self, cf, debut, fin, montee, descente, palier,
-                 trim_roll=0.0, trim_pitch=0.0):
+                 trim_roll=0.0, trim_pitch=0.0, note=''):
         self.cf = cf
         self.debut, self.fin = debut, fin
         self.montee, self.descente, self.palier = montee, descente, palier
         self.trim_roll, self.trim_pitch = trim_roll, trim_pitch
+        self.note = note
         # Descent always reaches 0. Stopping at --debut left the drone flying
         # whenever --debut was above hover, and the final cut dropped it.
         self.pente = max(1.0, fin / descente)
@@ -352,7 +353,7 @@ def cmd_ramp(a):
 
     cf = connecter(attente_toc=3.0)
     r = Rampe(cf, a.debut, a.fin, a.montee, a.descente, a.palier,
-              a.trim_roll, a.trim_pitch)
+              a.trim_roll, a.trim_pitch, a.note)
     code = 0
     try:
         r.executer()
@@ -377,82 +378,328 @@ def cmd_ramp(a):
     return code
 
 
+# --- diff -------------------------------------------------------------------
+# What a firmware flash is most likely to silently reset. The web flasher
+# documents neither its version nor whether it keeps these.
+CRITIQUES = ('trim', 'flightmode.', 'stabilizer.', 'powerDist.', 'motion.',
+             'range.', 'kalman')
+
+
+def _lire_params(chemin):
+    d = {}
+    if os.path.exists(chemin):
+        for l in open(chemin, encoding='utf-8'):
+            if '=' in l:
+                k, v = l.split('=', 1)
+                d[k.strip()] = v.strip()
+    return d
+
+
+def _lire_noms(chemin):
+    if not os.path.exists(chemin):
+        return set()
+    return {l.strip() for l in open(chemin, encoding='utf-8') if l.strip()}
+
+
+def cmd_diff(a):
+    """Compare two dump folders. Short on purpose: the point is to spot what a
+    flash moved, not to read 183 lines."""
+    av, ap = a.avant, a.apres
+    p_av, p_ap = (_lire_params(os.path.join(d, 'params.txt')) for d in (av, ap))
+    if not p_av or not p_ap:
+        print(f'[ERREUR] params.txt manquant dans {av if not p_av else ap}')
+        return 1
+
+    ajoutes = sorted(set(p_ap) - set(p_av))
+    retires = sorted(set(p_av) - set(p_ap))
+    changes = sorted(k for k in set(p_av) & set(p_ap) if p_av[k] != p_ap[k])
+    l_av, l_ap = (_lire_noms(os.path.join(d, 'log_vars.txt')) for d in (av, ap))
+
+    print(f'{os.path.basename(av)} -> {os.path.basename(ap)}')
+    print(f'  parametres : {len(p_av)} -> {len(p_ap)}'
+          f'  (+{len(ajoutes)} -{len(retires)} ~{len(changes)})')
+    print(f'  log        : {len(l_av)} -> {len(l_ap)}'
+          f'  (+{len(l_ap - l_av)} -{len(l_av - l_ap)})')
+
+    for nom, s in (('ajoute', ajoutes), ('retire', retires)):
+        if s:
+            print(f'  param {nom} : {", ".join(s[:6])}'
+                  + (f' ... (+{len(s) - 6})' if len(s) > 6 else ''))
+
+    critiques = [k for k in changes if any(c in k for c in CRITIQUES)]
+    autres = [k for k in changes if k not in critiques]
+    for k in critiques:
+        print(f'  ! {k} : {p_av[k]} -> {p_ap[k]}')
+    for k in autres[:5]:
+        print(f'    {k} : {p_av[k]} -> {p_ap[k]}')
+    if len(autres) > 5:
+        print(f'    ... et {len(autres) - 5} autres')
+    for nom, s in (('ajoute', set(l_ap) - set(l_av)), ('retire', set(l_av) - set(l_ap))):
+        if s:
+            print(f'  log {nom} : {", ".join(sorted(s)[:6])}'
+                  + (' ...' if len(s) > 6 else ''))
+    if not changes and l_av == l_ap:
+        print('  identique')
+    print(f'  URI inchangee : {safety.URI} (codee en dur dans le driver,'
+          ' pas un parametre)')
+    return 0
+
+
 # --- check ------------------------------------------------------------------
-# One block, 13 bytes: vbat 4 + zrange 4 + deltaX 2 + deltaY 2 + squal 1.
-CHECK_VARS = ['pm.vbat', 'range.zrange', 'motion.deltaX', 'motion.deltaY',
-              'motion.squal']
+# Two blocks: a CRTP block holds about 26 bytes, and these would not fit in one.
+CHECK_BLOCS = {
+    'capteurs': ['pm.vbat', 'range.zrange', 'motion.deltaX', 'motion.deltaY',
+                 'motion.squal'],
+    'estime': ['stateEstimate.x', 'stateEstimate.y', 'stateEstimate.z'],
+}
+
+
+def _collecte(cf, duree, sacs):
+    fin = time.time() + duree
+    while time.time() < fin:
+        time.sleep(0.05)
+    return {nom: list(v) for nom, v in sacs.items()}
 
 
 def cmd_check(a):
-    """Pre-flight checks, no motors. Exit 0 if everything passes."""
+    """Pre-flight checks, no motors. Exit 0 if everything passes.
+
+    Criteria are reaction-based, not magnitude thresholds: the brief asks for
+    thresholds to be calibrated on the first real logs rather than guessed.
+    """
     from cflib.crazyflie.log import LogConfig
 
-    echantillons = []
+    sacs = {nom: [] for nom in CHECK_BLOCS}
+    blocs, manquants = [], []
     cf = connecter(attente_toc=3.0)
     try:
-        bloc = LogConfig(name='check', period_in_ms=50)
-        for v in CHECK_VARS:
-            bloc.add_variable(v)
-        bloc.data_received_cb.add_callback(
-            lambda ms, data, lc: echantillons.append(
-                (time.time(), {v: data.get(v, 0) for v in CHECK_VARS})))
-        cf.log.add_config(bloc)
-        bloc.start()
+        for nom, variables in CHECK_BLOCS.items():
+            try:
+                b = LogConfig(name=nom, period_in_ms=50)
+                for v in variables:
+                    b.add_variable(v)
+                b.data_received_cb.add_callback(
+                    lambda ms, data, lc, nom=nom, variables=variables:
+                    sacs[nom].append({v: data.get(v, 0) for v in variables}))
+                cf.log.add_config(b)
+                b.start()
+                blocs.append(b)
+            except Exception as e:
+                manquants.append(f'{nom} ({type(e).__name__})')
 
-        time.sleep(1.5)
-        n_repos = len(echantillons)
-        print(f'>>> Bouge le drone a la main pendant {a.duree:.0f} s, maintenant.')
-        time.sleep(a.duree)
-        bloc.stop()
-        bloc.delete()
+        repos = _collecte(cf, 1.5, sacs)
+        print(f'>>> Leve et deplace le drone a la main {a.duree:.0f} s,'
+              ' au-dessus d une surface texturee et eclairee.')
+        _collecte(cf, a.duree, sacs)
     finally:
+        for b in blocs:
+            try:
+                b.stop()
+                b.delete()
+            except Exception:
+                pass
         try:
             cf.close_link()
         except Exception:
             pass
 
-    if not echantillons:
-        print('FAIL  lien      : aucune donnee de log recue')
+    cap, est = sacs['capteurs'], sacs['estime']
+    if not cap:
+        print('FAIL  lien     : aucune donnee de log recue')
         return 1
-    bouge = [e[1] for e in echantillons[n_repos:]]
-    tous = [e[1] for e in echantillons]
+    # everything after the rest phase is the hand-movement window
+    bouge = cap[len(repos['capteurs']):]
+    r = [('PASS', 'lien', f'{len(cap)} echantillons')]
+    if manquants:
+        r.append(('FAIL', 'blocs', 'non demarres : ' + ', '.join(manquants)))
 
-    resultats = []
-    resultats.append(('PASS', 'lien', f'{len(tous)} echantillons recus'))
-
-    v = [e['pm.vbat'] for e in tous if e['pm.vbat'] > 0]
+    v = [e['pm.vbat'] for e in cap if e['pm.vbat'] > 0]
     if not v:
-        resultats.append(('FAIL', 'batterie', 'pas de lecture'))
+        r.append(('FAIL', 'batterie', 'pas de lecture'))
     else:
-        vmin = min(v)
-        etat = ('PASS' if vmin >= safety.VBAT_COMPARABLE else
-                'FAIL' if vmin < safety.VBAT_PLANCHER else 'WARN')
-        resultats.append((etat, 'batterie', f'{vmin:.2f} V'
-                          f' (comparable >= {safety.VBAT_COMPARABLE},'
-                          f' plancher {safety.VBAT_PLANCHER})'))
+        etat = ('PASS' if min(v) >= safety.VBAT_COMPARABLE else
+                'FAIL' if min(v) < safety.VBAT_PLANCHER else 'WARN')
+        r.append((etat, 'batterie', f'{min(v):.2f} V (comparable >= '
+                  f'{safety.VBAT_COMPARABLE}, plancher {safety.VBAT_PLANCHER})'))
 
-    h = [e['range.zrange'] for e in tous if e['range.zrange'] > 0]
-    resultats.append(('PASS', 'hauteur', f'{min(h):.0f} a {max(h):.0f} mm')
-                     if h else
-                     ('FAIL', 'hauteur', 'zrange toujours nul, module absent ?'))
+    # Height must not merely exist, it must move when the drone is lifted.
+    h = [e['range.zrange'] for e in cap if e['range.zrange'] > 0]
+    if not h:
+        r.append(('FAIL', 'hauteur', 'zrange nul, module absent ?'))
+    elif max(h) - min(h) <= 0:
+        r.append(('FAIL', 'hauteur', f'fige a {h[0]:.0f} mm, ne suit pas le mouvement'))
+    else:
+        r.append(('PASS', 'hauteur', f'{min(h):.0f} a {max(h):.0f} mm'))
 
-    deplacement = sum(abs(e['motion.deltaX']) + abs(e['motion.deltaY'])
-                      for e in bouge)
-    resultats.append(('PASS', 'flux', f'{deplacement:.0f} unites pendant le mouvement')
-                     if deplacement > 0 else
-                     ('FAIL', 'flux', 'aucune reaction au mouvement'))
+    d = sum(abs(e['motion.deltaX']) + abs(e['motion.deltaY']) for e in bouge)
+    r.append(('PASS', 'flux', f'{d:.0f} unites pendant le mouvement') if d > 0
+             else ('FAIL', 'flux', 'aucune reaction au mouvement'))
 
-    sq = sorted(e['motion.squal'] for e in tous)
+    sq = sorted(e['motion.squal'] for e in cap)
     med = sq[len(sq) // 2] if sq else 0
-    resultats.append(('PASS', 'squal', f'median {med:.0f}') if med > 0 else
-                     ('FAIL', 'squal', 'nul, surface trop lisse ou module absent'))
+    r.append(('PASS', 'squal', f'median {med:.0f}') if med > 0
+             else ('FAIL', 'squal', 'nul, surface lisse ou module absent'))
 
-    for etat, nom, detail in resultats:
+    if not est:
+        r.append(('FAIL', 'estime', 'stateEstimate muet'))
+    else:
+        bouge_est = est[len(repos['estime']):] or est
+        amp = max(max(abs(e[k]) for k in e) for e in bouge_est)
+        r.append(('PASS', 'estime', f'repond, amplitude {amp:.2f} m') if amp > 0
+                 else ('FAIL', 'estime', 'reste a zero'))
+
+    for etat, nom, detail in r:
         print(f'{etat:4}  {nom:9}: {detail}')
-    echecs = [r for r in resultats if r[0] == 'FAIL']
-    print('FAIL' if echecs else 'PASS', '- ',
-          f'{len(echecs)} verification(s) en echec' if echecs
-          else 'pret pour un vol')
+    echecs = [x for x in r if x[0] == 'FAIL']
+    print(('FAIL - ' + f'{len(echecs)} verification(s) en echec') if echecs
+          else 'PASS - pret pour un vol')
+    if a.baseline:
+        print('')
+        return cmd_dump(argparse.Namespace(sortie=a.baseline))
+    return 1 if echecs else 0
+
+
+# --- vol --------------------------------------------------------------------
+def cmd_vol(a):
+    """Short supervised hover through the official library.
+
+    NOT YET FLOWN. The library is blocking: takeoff() and hover() do not
+    return until they are done, so the limits it does not enforce are policed
+    from this thread while the flight runs in another, and any violation calls
+    emergency_stop().
+
+    A thrust ceiling is deliberately absent: the library flies with
+    send_hover_setpoint, which carries an altitude and no thrust, so there is
+    no thrust value to clamp. Height, duration and voltage are what remain.
+    """
+    safety.verifier_trim(a.trim_roll, a.trim_pitch)
+    safety.verifier_duree(a.duree, safety.VOL_MAX_S, 'duree')
+    if a.hauteur <= 0 or a.hauteur > safety.HAUTEUR_MAX_M:
+        raise safety.Refus(f'hauteur {a.hauteur} hors de '
+                           f']0, {safety.HAUTEUR_MAX_M}] m')
+
+    if not a.sans_check:
+        print('Pre-vol...')
+        if cmd_check(argparse.Namespace(duree=3.0, baseline=None)) != 0:
+            print('[STOP] check en echec, vol annule (--sans-check pour forcer)')
+            return 1
+        print('')
+
+    from litewing import LiteWing
+
+    print(f'Vol : {a.hauteur:.2f} m pendant {a.duree:.1f} s,'
+          f' trim roll {a.trim_roll:+.2f} pitch {a.trim_pitch:+.2f}')
+    print('/!\\ zone degagee. Ctrl+C coupe, x coupe, toute touche fait atterrir.')
+    if not a.oui:
+        for i in (5, 4, 3, 2, 1):
+            print(f'  demarrage dans {i}')
+            time.sleep(1)
+
+    etat = {'motif': None, 'fini': False}
+
+    def voler(drone):
+        try:
+            drone.takeoff(height=a.hauteur)
+            drone.hover(a.duree)
+            drone.land()
+        except Exception as e:
+            etat['motif'] = etat['motif'] or f'erreur de vol : {e}'
+        finally:
+            etat['fini'] = True
+
+    code = 0
+    with LiteWing(ip=safety.IP) as drone:
+        drone.connect()
+        drone.hover_trim_roll = a.trim_roll
+        drone.hover_trim_pitch = a.trim_pitch
+        drone.arm()
+        fil = threading.Thread(target=voler, args=(drone,), daemon=True)
+        debut = time.time()
+        fil.start()
+        try:
+            while not etat['fini']:
+                time.sleep(0.05)
+                s = drone.read_sensors()
+                v = getattr(s, 'battery', 0) or 0
+                h = getattr(s, 'height', 0) or 0
+                if v and v < safety.VBAT_PLANCHER:
+                    etat['motif'] = f'batterie {v:.2f} V sous le plancher'
+                elif h > safety.HAUTEUR_MAX_M:
+                    etat['motif'] = f'hauteur {h:.2f} m au-dessus du plafond'
+                elif time.time() - debut > a.duree + safety.MARGE_VOL_S:
+                    etat['motif'] = 'duree depassee'
+                elif safety.lire_touche() is not None:
+                    etat['motif'] = 'touche'
+                if etat['motif']:
+                    break
+        except KeyboardInterrupt:
+            etat['motif'] = 'Ctrl+C'
+        if etat['motif']:
+            print(f"\n[STOP] {etat['motif']} -> coupure")
+            try:
+                drone.emergency_stop()
+            except Exception:
+                pass
+            code = 1
+        fil.join(timeout=3.0)
+    print('Termine.')
+    return code
+
+
+# --- cam --------------------------------------------------------------------
+def cmd_cam(a):
+    """Measure the camera stream and what it costs the drone's link.
+
+    The comparison is the whole point: the same ping, once idle and once with
+    the stream running. One Wi-Fi adapter is enough only if the second stays
+    close to the first.
+    """
+    import camera
+
+    hote = a.url.split('//')[-1].split('/')[0].split(':')[0]
+    r = [('PASS', 'camera', f'{hote} joignable')
+         if camera.joignable(hote, a.port) else
+         ('FAIL', 'camera', f'{hote}:{a.port} injoignable')]
+
+    print(f'Reference : ping {safety.IP} sans flux...')
+    env, rec, mn, moy, mx = camera.ping(safety.IP, a.pings)
+    ref = moy
+    r.append(('PASS', 'ping seul', f'{rec}/{env} recus, {mn}-{mx} ms,'
+              f' moyenne {moy:.1f} ms') if rec else
+             ('FAIL', 'ping seul', 'drone injoignable'))
+
+    print(f'Flux {a.duree:.0f} s + ping simultane...')
+    res = {}
+    fil = threading.Thread(
+        target=lambda: res.update(camera.lire_flux(a.url, a.duree, a.sortie)),
+        daemon=True)
+    fil.start()
+    env2, rec2, mn2, moy2, mx2 = camera.ping(safety.IP, a.pings)
+    fil.join(timeout=a.duree + 10)
+
+    f = res.get('frames', 0)
+    r.append(('PASS', 'flux', f"{f} images, {res.get('fps', 0)} fps,"
+              f" {res.get('debit_kbs', 0)} ko/s") if f else
+             ('FAIL', 'flux', f"aucune image ({res.get('erreur', 'pas de donnees')})"))
+    if res.get('ecart_max') is not None:
+        r.append(('PASS' if res['ecart_max'] < 1.0 else 'WARN', 'regularite',
+                  f"plus long creux {res['ecart_max']:.2f} s"))
+    if res.get('reconnexions'):
+        r.append(('WARN', 'stabilite', f"{res['reconnexions']} reconnexion(s)"))
+
+    if rec2 and ref:
+        delta = moy2 - ref
+        r.append(('PASS' if delta < 20 and rec2 == env2 else 'FAIL',
+                  'ping+flux', f'{rec2}/{env2} recus, moyenne {moy2:.1f} ms'
+                  f' ({delta:+.1f} ms vs sans flux)'))
+    else:
+        r.append(('FAIL', 'ping+flux', f'{rec2}/{env2} recus'))
+
+    for etat, nom, detail in r:
+        print(f'{etat:4}  {nom:10}: {detail}')
+    echecs = [x for x in r if x[0] == 'FAIL']
+    print(('FAIL - ' + f'{len(echecs)} en echec') if echecs
+          else 'PASS - une seule carte Wi-Fi suffit')
     return 1 if echecs else 0
 
 
@@ -496,13 +743,40 @@ def main():
     r.add_argument('--palier', type=float, default=0.0)
     r.add_argument('--trim-roll', type=float, default=0.0, dest='trim_roll')
     r.add_argument('--trim-pitch', type=float, default=0.0, dest='trim_pitch')
+    r.add_argument('--note', default='', help='champ libre repris dans summary.json')
     r.add_argument('--oui', action='store_true', help='sans compte a rebours')
     r.set_defaults(fn=cmd_ramp)
+
+    o = sous.add_parser('vol', help='vol stationnaire court par la bibliotheque')
+    o.add_argument('--hauteur', type=float, default=0.5, help='metres (defaut 0.5)')
+    o.add_argument('--duree', type=float, default=3.0, help='secondes (defaut 3)')
+    o.add_argument('--trim-roll', type=float, default=0.0, dest='trim_roll')
+    o.add_argument('--trim-pitch', type=float, default=0.0, dest='trim_pitch')
+    o.add_argument('--note', default='', help='champ libre repris dans summary.json')
+    o.add_argument('--sans-check', action='store_true', dest='sans_check')
+    o.add_argument('--oui', action='store_true', help='sans compte a rebours')
+    o.set_defaults(fn=cmd_vol)
+
+    f = sous.add_parser('diff', help='compare deux dumps, avant et apres flash')
+    f.add_argument('avant', nargs='?', default=os.path.join(DOSSIER_DATA, 'baseline'))
+    f.add_argument('apres', nargs='?',
+                   default=os.path.join(DOSSIER_DATA, 'apres-flash'))
+    f.set_defaults(fn=cmd_diff)
 
     c = sous.add_parser('check', help='verifications avant vol, sans moteur')
     c.add_argument('--duree', type=float, default=3.0,
                    help='duree du mouvement a la main (defaut 3 s)')
+    c.add_argument('--baseline', nargs='?', const=os.path.join(DOSSIER_DATA,
+                   'baseline'), help='enchainer un dump dans ce dossier')
     c.set_defaults(fn=cmd_check)
+
+    m = sous.add_parser('cam', help='flux camera et cout sur le lien du drone')
+    m.add_argument('--url', default='http://192.168.43.50:81/stream')
+    m.add_argument('--port', type=int, default=81)
+    m.add_argument('--duree', type=float, default=15.0, help='secondes de flux')
+    m.add_argument('--pings', type=int, default=10)
+    m.add_argument('--sortie', help='dossier ou ecrire quelques images')
+    m.set_defaults(fn=cmd_cam)
 
     v = sous.add_parser('voir', help='resume d un run, sans connexion au drone')
     v.add_argument('run', nargs='?', help='dossier de run (defaut : le dernier)')

@@ -75,7 +75,8 @@ def resume(dossier):
     flux = lire_csv(os.path.join(dossier, 'flux.csv'))
     meta = lire_run_txt(dossier)
 
-    s = {'dossier': os.path.basename(dossier), 'meta': meta,
+    s = {'dossier': os.path.basename(dossier), 'note': meta.get('note', ''),
+         'meta': meta,
          'points': {'moteurs': len(moteurs), 'etat': len(etat), 'flux': len(flux)},
          'drapeaux': []}
 
