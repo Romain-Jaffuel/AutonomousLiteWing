@@ -60,12 +60,36 @@ port. `voir` reads files and never connects, so it can run at any time.
 ## Layout
 
 ```
-scripts/safety.py    limits and keyboard abort, the single source
-scripts/lw.py        command line: dump, check, ramp, voir
-scripts/analyse.py   summary.json, printed summary, PNG plot
-data/baseline/       firmware state captured before flashing
-data/runs/<stamp>/   one folder per run: CSVs, run.txt, summary.json
+scripts/safety.py       limits and keyboard abort, the single source
+scripts/lw.py           command line: dump, diff, check, ramp, vol, cam, voir
+scripts/analyse.py      summary.json, printed summary, PNG plot
+scripts/camera.py       MJPEG stream and the drone's ping under it
+scripts/bench_vision.py detector cost on this machine, separate environment
+data/baseline/          firmware state captured before flashing
+data/runs/<stamp>/      one folder per run: CSVs, run.txt, summary.json
+data/bench/             detector measurements, one JSON per run
 ```
+
+## Measuring what a detector costs here
+
+Vision lives in its own environment, kept apart from the pinned one above so
+the drone tooling stays small:
+
+```sh
+uv venv .venv-vision --python 3.11
+uv pip install --python .venv-vision --index-url https://download.pytorch.org/whl/cpu torch torchvision
+uv pip install --python .venv-vision ultralytics openvino truststore
+.venv-vision/Scripts/python.exe scripts/bench_vision.py
+```
+
+The window is one flight, 180 s, reported per 30 s slice: a ten-minute soak
+test says little when a flight lasts two or three minutes, and an average
+hides a chip that starts fast and slows down. Devices the machine does not
+have are reported absent rather than timed, because OpenVINO otherwise falls
+back to the CPU and passes the result off as an NPU figure.
+
+`truststore` is not optional where TLS is intercepted: without it Python's
+bundled roots reject the model download.
 
 ## Reading a run
 
