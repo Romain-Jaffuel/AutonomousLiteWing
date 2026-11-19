@@ -19,5 +19,9 @@ cache/
 __pycache__/
 *.pyc
 
+# poids de modeles et exports : telechargeables, hors depot
+*.pt
+*_openvino_model/
+
 # clone du fork cflib, depot tiers avec son propre .git
 crazyflie-clients-python/
