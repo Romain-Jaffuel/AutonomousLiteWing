@@ -126,6 +126,79 @@ BLOCS = {
 }
 
 
+class Enregistreur:
+    """Opens the log blocks and writes one run folder.
+
+    Shared by ramp and vol so both produce identical CSVs and analyse.py needs
+    no special case. `commande` is a callable because the two mean different
+    things by it: a thrust for ramp, a target height in mm for vol.
+    """
+
+    def __init__(self, cf, commande, mode):
+        self.cf, self.commande, self.mode = cf, commande, mode
+        self.recues = {nom: [] for nom in BLOCS}
+        self.ouverts = []
+        self.origine_ms = None
+
+    def _horodatage(self, ms):
+        """Seconds since the first packet, on the drone's clock. The PC clock
+        would misalign the blocks and fold Wi-Fi jitter into every sample."""
+        if self.origine_ms is None:
+            self.origine_ms = ms
+        return (ms - self.origine_ms) / 1000.0
+
+    def demarrer(self):
+        from cflib.crazyflie.log import LogConfig
+        for nom, (periode, variables) in BLOCS.items():
+            try:
+                bloc = LogConfig(name=nom, period_in_ms=periode)
+                for v in variables:
+                    bloc.add_variable(v)
+                bloc.data_received_cb.add_callback(
+                    lambda ms, data, lc, nom=nom, variables=variables:
+                    self.recues[nom].append(
+                        [self._horodatage(ms), self.commande()]
+                        + [data.get(v, 0) for v in variables]))
+                self.cf.log.add_config(bloc)
+                bloc.start()
+                self.ouverts.append(bloc)
+            except Exception as e:
+                print(f'[AVERTISSEMENT] bloc {nom} indisponible : {e}')
+        print(f'Enregistrement : {len(self.ouverts)}/{len(BLOCS)} blocs')
+
+    def arreter(self):
+        for b in self.ouverts:
+            try:
+                b.stop()
+                b.delete()
+            except Exception:
+                pass
+
+    def ecrire(self, meta):
+        """One folder per run. The CSVs used to be overwritten at the root, so
+        only what was copied by hand survived."""
+        dossier = os.path.join(DOSSIER_RUNS,
+                               datetime.now().strftime('%Y-%m-%d_%H%M%S'))
+        os.makedirs(dossier, exist_ok=True)
+        for nom, (_, variables) in BLOCS.items():
+            if not self.recues[nom]:
+                continue
+            entete = ['t_s', 'commande'] + [v.split('.')[-1] for v in variables]
+            with open(os.path.join(dossier, f'{nom}.csv'), 'w',
+                      encoding='utf-8', newline='\n') as f:
+                f.write(';'.join(entete) + '\n')
+                for l in self.recues[nom]:
+                    f.write(';'.join(f'{x:.3f}' if isinstance(x, float) else str(x)
+                                     for x in l) + '\n')
+        with open(os.path.join(dossier, 'run.txt'), 'w',
+                  encoding='utf-8', newline='\n') as f:
+            f.write(f'mode      = {self.mode}\n')
+            f.write(f'date      = {datetime.now().isoformat(timespec="seconds")}\n')
+            for k, v in meta.items():
+                f.write(f'{k:9} = {v}\n')
+        return dossier
+
+
 class Rampe:
     """Linear thrust ramp over send_setpoint, with keyboard abort and logging.
 
@@ -151,9 +224,7 @@ class Rampe:
         self.evenement = 'rampe complete'
         self.commande = 0
 
-        self.lignes = {nom: [] for nom in BLOCS}
-        self.blocs = []
-        self.t_zero = None
+        self.enr = Enregistreur(cf, lambda: self.commande, 'ramp')
 
     # --- control ---
     def _appliquer(self, valeur):
@@ -226,40 +297,6 @@ class Rampe:
         return arrivee
 
     # --- logging ---
-    def _horodatage(self, ms):
-        """Seconds since the first packet, on the drone's clock. The PC clock
-        would misalign the blocks and fold Wi-Fi jitter into every sample."""
-        if self.t_zero is None:
-            self.t_zero = ms
-        return (ms - self.t_zero) / 1000.0
-
-    def _logs_demarrer(self):
-        from cflib.crazyflie.log import LogConfig
-        for nom, (periode, variables) in BLOCS.items():
-            try:
-                bloc = LogConfig(name=nom, period_in_ms=periode)
-                for v in variables:
-                    bloc.add_variable(v)
-                bloc.data_received_cb.add_callback(
-                    lambda ms, data, lc, nom=nom, variables=variables:
-                    self.lignes[nom].append(
-                        [self._horodatage(ms), self.commande]
-                        + [data.get(v, 0) for v in variables]))
-                self.cf.log.add_config(bloc)
-                bloc.start()
-                self.blocs.append(bloc)
-            except Exception as e:
-                print(f'[AVERTISSEMENT] bloc {nom} indisponible : {e}')
-        print(f'Enregistrement : {len(self.blocs)}/{len(BLOCS)} blocs')
-
-    def _logs_arreter(self):
-        for b in self.blocs:
-            try:
-                b.stop()
-                b.delete()
-            except Exception:
-                pass
-
     # --- sequence ---
     def executer(self):
         print('Deverrouillage (poussee nulle)')
@@ -272,7 +309,7 @@ class Rampe:
         except Exception:
             pass
 
-        self._logs_demarrer()
+        self.enr.demarrer()
         print(f'\n  touche = decelere vers {safety.CIBLE_DECELERATION} + note'
               f'\n  x = baisse puis coupure, Ctrl+C = coupure immediate\n')
         try:
@@ -296,38 +333,17 @@ class Rampe:
             print('Coupure moteurs.')
         finally:
             self._couper()
-            self._logs_arreter()
+            self.enr.arreter()
 
     def ecrire_run(self):
-        """One folder per run: the CSVs used to be overwritten, so only what
-        was copied by hand survived."""
-        dossier = os.path.join(DOSSIER_RUNS,
-                               datetime.now().strftime('%Y-%m-%d_%H%M%S'))
-        os.makedirs(dossier, exist_ok=True)
-        for nom, (_, variables) in BLOCS.items():
-            lignes = self.lignes[nom]
-            if not lignes:
-                continue
-            chemin = os.path.join(dossier, f'{nom}.csv')
-            entete = ['t_s', 'commande'] + [v.split('.')[-1] for v in variables]
-            with open(chemin, 'w', encoding='utf-8', newline='\n') as f:
-                f.write(';'.join(entete) + '\n')
-                for l in lignes:
-                    f.write(';'.join(f'{x:.3f}' if isinstance(x, float) else str(x)
-                                     for x in l) + '\n')
-        with open(os.path.join(dossier, 'run.txt'), 'w',
-                  encoding='utf-8', newline='\n') as f:
-            f.write(f'date      = {datetime.now().isoformat(timespec="seconds")}\n')
-            f.write(f'debut     = {self.debut}\nfin       = {self.fin}\n')
-            f.write(f'montee_s  = {self.montee}\npalier_s  = {self.palier}\n')
-            f.write(f'descente_s= {self.descente}\n')
-            f.write(f'trim_roll = {self.trim_roll}\ntrim_pitch= {self.trim_pitch}\n')
-            f.write(f'poussee_max = {self.poussee_max}\n')
-            f.write(f'regime_releve = {self.regime_releve}\n')
-            f.write(f'temps_releve  = {self.temps_releve}\n')
-            f.write(f'evenement = {self.evenement}\n')
-            f.write(f'note      = {self.note}\n')
-        return dossier
+        return self.enr.ecrire({
+            'debut': self.debut, 'fin': self.fin, 'montee_s': self.montee,
+            'palier_s': self.palier, 'descente_s': self.descente,
+            'trim_roll': self.trim_roll, 'trim_pitch': self.trim_pitch,
+            'poussee_max': self.poussee_max,
+            'regime_releve': self.regime_releve,
+            'temps_releve': self.temps_releve,
+            'evenement': self.evenement, 'note': self.note})
 
 
 def cmd_ramp(a):
@@ -598,23 +614,39 @@ def cmd_vol(a):
             print(f'  demarrage dans {i}')
             time.sleep(1)
 
-    etat = {'motif': None, 'fini': False}
+    etat = {'motif': None, 'fini': False, 'cible_mm': 0}
 
     def voler(drone):
         try:
+            etat['cible_mm'] = int(a.hauteur * 1000)
             drone.takeoff(height=a.hauteur)
             drone.hover(a.duree)
             drone.land()
         except Exception as e:
             etat['motif'] = etat['motif'] or f'erreur de vol : {e}'
         finally:
+            etat['cible_mm'] = 0
             etat['fini'] = True
 
-    code = 0
+    code, enr = 0, None
     with LiteWing(ip=safety.IP) as drone:
         drone.connect()
         drone.hover_trim_roll = a.trim_roll
         drone.hover_trim_pitch = a.trim_pitch
+
+        # The library owns the cflib link, so the log blocks hang off its
+        # internal instance. Private attribute: if it is renamed upstream the
+        # flight still happens, only the recording is lost.
+        cf = next((getattr(drone, n) for n in
+                   ('_cf_instance', '_cf', 'cf', 'crazyflie')
+                   if getattr(drone, n, None) is not None), None)
+        if cf is not None and hasattr(cf, 'log'):
+            enr = Enregistreur(cf, lambda: etat['cible_mm'], 'vol')
+            enr.demarrer()
+        else:
+            print('[AVERTISSEMENT] connexion interne introuvable :'
+                  ' vol sans enregistrement')
+
         drone.arm()
         fil = threading.Thread(target=voler, args=(drone,), daemon=True)
         debut = time.time()
@@ -645,6 +677,17 @@ def cmd_vol(a):
                 pass
             code = 1
         fil.join(timeout=3.0)
+        if enr is not None:
+            enr.arreter()
+
+    if enr is not None:
+        dossier = enr.ecrire({
+            'hauteur_m': a.hauteur, 'duree_s': a.duree,
+            'trim_roll': a.trim_roll, 'trim_pitch': a.trim_pitch,
+            'evenement': etat['motif'] or 'vol complet', 'note': a.note})
+        print(f'\nRun -> {dossier}')
+        import analyse
+        analyse.resumer(dossier)
     print('Termine.')
     return code
 

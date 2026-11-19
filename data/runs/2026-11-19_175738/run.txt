@@ -1,0 +1,14 @@
+mode      = ramp
+date      = 2026-11-19T17:57:38
+debut     = 20000
+fin       = 24000
+montee_s  = 3.0
+palier_s  = 0.0
+descente_s = 3.0
+trim_roll = 0.0
+trim_pitch = 0.0
+poussee_max = 24000
+regime_releve = None
+temps_releve = None
+evenement = rampe complete
+note      = verif refacto Enregistreur

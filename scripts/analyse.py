@@ -46,15 +46,22 @@ def lire_run_txt(dossier):
     return meta
 
 
-def fenetre_vol(moteurs):
-    """Climb and hold only.
+def fenetre_vol(moteurs, mode='ramp'):
+    """The samples worth analysing.
 
-    Two zones are excluded because they produced wrong verdicts before. The
-    start, where the firmware has not taken the first setpoint yet, so thrust
-    reads 0 against a high command. And the descent, where the drone is on the
-    ground and the stabilizer fights the floor: its integrator winds up, one
-    motor goes to 65535 and the others to 0, which measures nothing.
+    For a ramp, climb and hold only. Two zones are excluded because they
+    produced wrong verdicts before: the start, where the firmware has not
+    taken the first setpoint yet and thrust reads 0 against a high command;
+    and the descent, where the drone is on the ground and the stabilizer
+    fights the floor, its integrator winding up until one motor sits at 65535
+    and the others at 0, which measures nothing.
+
+    For a flight, `commande` is a target height, not a thrust, so the climb
+    heuristic does not apply. The window is simply where the firmware is
+    driving the motors.
     """
+    if mode == 'vol':
+        return [r for r in moteurs if r.get('thrust', 0) > 0]
     pts = [r for r in moteurs if r['commande'] > 0 and r.get('thrust', 0) > 0]
     if len(pts) < 3:
         return []
@@ -75,12 +82,13 @@ def resume(dossier):
     flux = lire_csv(os.path.join(dossier, 'flux.csv'))
     meta = lire_run_txt(dossier)
 
-    s = {'dossier': os.path.basename(dossier), 'note': meta.get('note', ''),
-         'meta': meta,
+    mode = meta.get('mode', 'ramp')
+    s = {'dossier': os.path.basename(dossier), 'mode': mode,
+         'note': meta.get('note', ''), 'meta': meta,
          'points': {'moteurs': len(moteurs), 'etat': len(etat), 'flux': len(flux)},
          'drapeaux': []}
 
-    vol = fenetre_vol(moteurs)
+    vol = fenetre_vol(moteurs, mode)
     s['points']['analyses'] = len(vol)
     if vol:
         s['duree_s'] = round(vol[-1]['t_s'] - vol[0]['t_s'], 2)
@@ -184,7 +192,12 @@ def resumer(dossier):
 
 def verdict_equilibrage(s):
     """No verdict below VBAT_VERDICT: the spread grows as voltage drops at
-    constant balance, because more PWM is needed for the same torque."""
+    constant balance, because more PWM is needed for the same torque. And none
+    at all on the ground: measured 1522 planted and 16955 half unloaded on the
+    same ramp, neither comparable to flight."""
+    if s.get('mode') != 'vol':
+        return ('equilibrage : PAS DE VERDICT, run au sol'
+                ' (ne se mesure qu en vol)')
     v = s.get('vbat_moyenne')
     if v is None:
         return 'equilibrage : pas de tension enregistree, aucun verdict'

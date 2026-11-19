@@ -18,7 +18,7 @@ CIBLE_DECELERATION = 20000  # keyboard deceleration stops here, then cut
 # Key x sheds this fraction over this many seconds, then cuts. Not a dead cut:
 # that drops the drone from a hover.
 BAISSE_X = 0.2
-DUREE_BAISSE_X = 1.0
+DUREE_BAISSE_X = 0.5
 
 # Constant tilt in degrees used to cancel a systematic drift. 1 degree is
 # 0.17 m/s2 of lateral acceleration, so a typo here would flip the drone.
